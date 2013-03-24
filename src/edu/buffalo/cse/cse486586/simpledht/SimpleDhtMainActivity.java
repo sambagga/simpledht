@@ -24,18 +24,20 @@ import android.telephony.TelephonyManager;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
+import android.view.View;
 import android.widget.TextView;
 
 public class SimpleDhtMainActivity extends Activity {
-	static String selfPort;
 	Handler handle = new Handler();
+	static String selfPort;
 	static String succ;
 	static String pred;
 	static Boolean largest;
 	static Boolean smallest;
 	static String queryValue;
 	ContentResolver conRes;
-	TextView tv; 
+	TextView tv;
+
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -68,6 +70,11 @@ public class SimpleDhtMainActivity extends Activity {
 		return portStr;
 	}
 
+	// LDump
+	public void LDump(View v) {
+
+	}
+
 	// client thread to multicast messages
 	class forClient extends Thread {
 		String msg, TAG = "forClient";
@@ -82,10 +89,10 @@ public class SimpleDhtMainActivity extends Activity {
 		public void run() {
 			Socket clSock;
 			try {
-				//Log.i("Client Thread Main", msg);
+				// Log.i("Client Thread Main", msg);
 				// connect to server
 				clSock = new Socket("10.0.2.2", port);
-				//Log.i("Sending Message type" + type + "=", msg);
+				// Log.i("Sending Message type" + type + "=", msg);
 				// send the message to server
 				PrintWriter sendData = new PrintWriter(clSock.getOutputStream());
 				if (type == 1) // join node request
@@ -101,7 +108,7 @@ public class SimpleDhtMainActivity extends Activity {
 				sendData.flush();
 				sendData.close();
 				clSock.close();
-				//Log.i("Message sent=", msg);
+				// Log.i("Message sent=", msg);
 
 			} catch (NumberFormatException e) {
 				// TODO Auto-generated catch block
@@ -122,20 +129,20 @@ public class SimpleDhtMainActivity extends Activity {
 
 		}
 	}// end of client thread
-	
+
 	private String genHash(String input) throws NoSuchAlgorithmException {
-        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-        byte[] sha1Hash = sha1.digest(input.getBytes());
-        Formatter formatter = new Formatter();
-        for (byte b : sha1Hash) {
-            formatter.format("%02x", b);
-        }
-        return formatter.toString();
-    }
-	
+		MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+		byte[] sha1Hash = sha1.digest(input.getBytes());
+		Formatter formatter = new Formatter();
+		for (byte b : sha1Hash) {
+			formatter.format("%02x", b);
+		}
+		return formatter.toString();
+	}
+
 	// server thread
 	class forServer extends Thread {
-		
+
 		String TAG = "forServer";
 
 		public void joinReq() {
@@ -153,25 +160,26 @@ public class SimpleDhtMainActivity extends Activity {
 				joinReq();
 				// open connection on port 10000
 				ServerSocket serSock = new ServerSocket(10000);
-				//Log.d("Starting Server", "Forserver");
+				// Log.d("Starting Server", "Forserver");
 				while (true) {
 					// listen for client
 					Socket recvSock = serSock.accept();
-					//Log.i("Connection", "Accepted");
+					// Log.i("Connection", "Accepted");
 					// get the message
 					InputStreamReader readStream = new InputStreamReader(
 							recvSock.getInputStream());
 					BufferedReader recvInp = new BufferedReader(readStream);
-					//Log.i("Reader", "Initialized");
+					// Log.i("Reader", "Initialized");
 					String recvMsg = recvInp.readLine();
-					//Log.i("Received Message Main:", recvMsg);
+					// Log.i("Received Message Main:", recvMsg);
 					// recognise message type
 					switch (recvMsg.charAt(0)) {
-					case '%': //insert
+					case '%': // insert
 						insertKey(recvMsg.substring(1));
 						break;
-					case '$': //query
-						queryKey(recvMsg.substring(1));
+					case '$': // query
+						Thread th = new queryKey(recvMsg.substring(1));
+						th.start();
 						break;
 					case '#': // join request
 						joinNode(recvMsg.substring(1));
@@ -184,7 +192,7 @@ public class SimpleDhtMainActivity extends Activity {
 						break;
 					case '^': // set predecessor
 						setPred(recvMsg.substring(1));
-						break;	
+						break;
 					case '@':
 						queryValue = recvMsg.substring(1);
 						break;
@@ -201,114 +209,136 @@ public class SimpleDhtMainActivity extends Activity {
 			}
 
 		}
-		
-		void joinNode(String newNode) throws NoSuchAlgorithmException{
+
+		void joinNode(String newNode) throws NoSuchAlgorithmException {
 			String currNode = selfPort;
-			int small=0, large=0;
-			if(genHash(newNode).compareTo(currNode)<0){
-				if(genHash(newNode).compareTo(pred)>0 || smallest==true){
-					if(smallest==true){
+			int small = 0, large = 0;
+			if (genHash(newNode).compareTo(currNode) < 0) {
+				if (genHash(newNode).compareTo(pred) > 0 || smallest == true) {
+					if (smallest == true) {
 						smallest = false;
-						small=1;
+						small = 1;
 					}
-					new Thread(new forClient(pred+";"+currNode+";"+small+";"+large, Integer.parseInt(newNode)*2, 2)).start();
-					new Thread(new forClient(newNode, Integer.parseInt(pred)*2, 3)).start();
+					new Thread(new forClient(pred + ";" + currNode + ";"
+							+ small + ";" + large,
+							Integer.parseInt(newNode) * 2, 2)).start();
+					new Thread(new forClient(newNode,
+							Integer.parseInt(pred) * 2, 3)).start();
 					pred = newNode;
+				} else if (genHash(newNode).compareTo(pred) < 0) {
+					new Thread(
+							new forClient(newNode, Integer.parseInt(pred), 1))
+							.start();
 				}
-				else if(genHash(newNode).compareTo(pred)<0){
-					new Thread(new forClient(newNode, Integer.parseInt(pred), 1)).start();
-				}
-			}
-			else if(genHash(newNode).compareTo(currNode)>0){
-				if(genHash(newNode).compareTo(succ)<0 || largest==true){
-					if(largest==true){
+			} else if (genHash(newNode).compareTo(currNode) > 0) {
+				if (genHash(newNode).compareTo(succ) < 0 || largest == true) {
+					if (largest == true) {
 						largest = false;
-						large=1;
+						large = 1;
 					}
-					new Thread(new forClient(currNode+";"+succ+";"+small+";"+large, Integer.parseInt(newNode)*2, 2)).start();
-					new Thread(new forClient(newNode, Integer.parseInt(succ)*2, 4)).start();
+					new Thread(new forClient(currNode + ";" + succ + ";"
+							+ small + ";" + large,
+							Integer.parseInt(newNode) * 2, 2)).start();
+					new Thread(new forClient(newNode,
+							Integer.parseInt(succ) * 2, 4)).start();
 					succ = newNode;
-				}
-				else if(genHash(newNode).compareTo(pred)<0){
-					new Thread(new forClient(newNode, Integer.parseInt(succ), 1)).start();
+				} else if (genHash(newNode).compareTo(pred) < 0) {
+					new Thread(
+							new forClient(newNode, Integer.parseInt(succ), 1))
+							.start();
 				}
 			}
 		}
-		
-		//update node
-		void updateNode(String msg){
+
+		// update node
+		void updateNode(String msg) {
 			StringTokenizer sTok = new StringTokenizer(msg, ";");
 			pred = sTok.nextToken();
 			succ = sTok.nextToken();
 			smallest = sTok.nextToken().equals("1");
 			largest = sTok.nextToken().equals("1");
-			handle.post(new Runnable() {
-				public void run() {
-					tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest+"\n");
-				}
-			});
-			
-			Log.i(""+selfPort, "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest);
+			// handle.post(new Runnable() {
+			// public void run() {
+			// tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ +
+			// ",Smallest:" + smallest + ",Largest:"+largest+"\n");
+			// }
+			// });
+
+			Log.i("" + selfPort, "Pred:" + pred + ",Succ:" + succ
+					+ ",Smallest:" + smallest + ",Largest:" + largest);
 		}
-		
-		//set Successor
-		void setSucc(String msg){
+
+		// set Successor
+		void setSucc(String msg) {
 			succ = msg;
-			handle.post(new Runnable() {
-				public void run() {
-					tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest+"\n");
-				}
-			});
-			Log.i(""+selfPort, "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest);
+			// handle.post(new Runnable() {
+			// public void run() {
+			// tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ +
+			// ",Smallest:" + smallest + ",Largest:"+largest+"\n");
+			// }
+			// });
+			Log.i("" + selfPort, "Pred:" + pred + ",Succ:" + succ
+					+ ",Smallest:" + smallest + ",Largest:" + largest);
 		}
-		
-		//set Predecessor
-		void setPred(String msg){
+
+		// set Predecessor
+		void setPred(String msg) {
 			pred = msg;
-			handle.post(new Runnable() {
-				public void run() {
-					tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest+"\n");
-				}
-			});
-			Log.i(""+selfPort, "Pred:" + pred + ",Succ:" + succ + ",Smallest:" + smallest + ",Largest:"+largest);
+			// handle.post(new Runnable() {
+			// public void run() {
+			// tv.append(""+selfPort+ "Pred:" + pred + ",Succ:" + succ +
+			// ",Smallest:" + smallest + ",Largest:"+largest+"\n");
+			// }
+			// });
+			Log.i("" + selfPort, "Pred:" + pred + ",Succ:" + succ
+					+ ",Smallest:" + smallest + ",Largest:" + largest);
 		}
-		
-		//build Uri
+
+		// build Uri
 		private Uri buildUri(String scheme, String authority) {
 			Uri.Builder uriBuilder = new Uri.Builder();
 			uriBuilder.authority(authority);
 			uriBuilder.scheme(scheme);
 			return uriBuilder.build();
 		}
-		
-		//insert key-value
-		void insertKey(String msg){
-			Uri mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledht.provider");
+
+		// insert key-value
+		void insertKey(String msg) {
+			Uri mUri = buildUri("content",
+					"edu.buffalo.cse.cse486586.simpledht.provider");
 			StringTokenizer sTok = new StringTokenizer(msg, ";");
 			String key = sTok.nextToken();
 			String value = sTok.nextToken();
-			//Log.i("Server insertKey","key:"+key+",value:"+value);
+			// Log.i("Server insertKey","key:"+key+",value:"+value);
 			ContentValues cv = new ContentValues();
-			cv.put("key" , key);
-			cv.put("value" , value);
+			cv.put("key", key);
+			cv.put("value", value);
 			conRes.insert(mUri, cv);
 		}
-		
-		//query key
-		void queryKey(String msg){
-			Uri mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledht.provider");
-			StringTokenizer sTok = new StringTokenizer(msg, ";");
-			String key = sTok.nextToken();
-			String port = sTok.nextToken();
-			Log.i("Server queryKey","key:"+key+",port:"+port);
-			Cursor resultCursor = conRes.query(mUri, null,
-					key, null, null);
-			int valIndex = resultCursor.getColumnIndex("value");
-			resultCursor.moveToFirst();
-			String value = resultCursor.getString(valIndex);
-			resultCursor.close();
-			new Thread(new forClient(value, Integer.parseInt(port)*2, 5)).start();
+
+		// query key
+		class queryKey extends Thread {
+			String msg;
+
+			queryKey(String msg) {
+				this.msg = msg;
+			}
+
+			public void run() {
+				Uri mUri = buildUri("content",
+						"edu.buffalo.cse.cse486586.simpledht.provider");
+				StringTokenizer sTok = new StringTokenizer(msg, ";");
+				String key = sTok.nextToken();
+				String port = sTok.nextToken();
+				Log.i("Server queryKey", "key:" + key + ",port:" + port);
+				Cursor resultCursor = conRes.query(mUri, null, key, null, null);
+				int valIndex = resultCursor.getColumnIndex("value");
+				resultCursor.moveToFirst();
+				String value = resultCursor.getString(valIndex);
+				resultCursor.close();
+				new Thread(new forClient(value, Integer.parseInt(port) * 2, 5))
+						.start();
+			}
 		}
-		
 	}// end of server thread
 }
